@@ -11,38 +11,30 @@ import { animPapillon } from "@/utils/ui/animations";
 import { useTheme } from "@react-navigation/native";
 
 interface AttendanceItemProps {
-  title: string
-  icon: ReactNode
-  attendances: Attendance[keyof Attendance]
-  missed?: { hours: number, minutes: number }
+  title: string;
+  icon: ReactNode;
+  attendances: Attendance[keyof Attendance];
+  missed?: { hours: number; minutes: number };
 }
 
-const NO_JUSTICATION = "Sans justification";
+const NO_JUSTIFICATION = "Sans justification";
 
 const AttendanceItem: React.FC<AttendanceItemProps> = ({
   title,
   icon,
   attendances,
-  missed
+  missed,
 }) => {
   const theme = useTheme();
   const [showMore, setShowMore] = useState(false);
 
   const sorted = attendances.sort((a, b) => {
-    if ("timestamp" in b && "timestamp" in a)
-      return b.timestamp - a.timestamp;
-
-    // Seulement le type `Absence` utilise `fromTimestamp`.
-    // Tout les autres utilisent `timestamp`.
+    if ("timestamp" in b && "timestamp" in a) return b.timestamp - a.timestamp;
     return (b as Absence).fromTimestamp - (a as Absence).fromTimestamp;
   });
 
   return (
-    <NativeList
-      animated
-      entering={animPapillon(FadeIn)}
-      exiting={animPapillon(FadeOut)}
-    >
+    <NativeList animated>
       <NativeItem
         animated
         endPadding={16}
@@ -56,9 +48,7 @@ const AttendanceItem: React.FC<AttendanceItemProps> = ({
             }}
           >
             {missed && (
-              <NativeText
-                variant="subtitle"
-              >
+              <NativeText variant="subtitle">
                 {missed.hours + " h"} {leadingZero(missed.minutes)} min
               </NativeText>
             )}
@@ -75,20 +65,47 @@ const AttendanceItem: React.FC<AttendanceItemProps> = ({
         if ("hours" in item) {
           const [hours, minutes] = item.hours.split("h").map(Number);
           totalTime = hours + "h " + leadingZero(minutes) + "min";
-        }
-        else if ("duration" in item) {
+        } else if ("duration" in item) {
           totalTime = item.duration + " min";
         }
 
         totalTime = totalTime.replace("0h ", "");
 
         const timestamp = "fromTimestamp" in item ? item.fromTimestamp : item.timestamp;
+        const toTimestamp = "toTimestamp" in item ? item.toTimestamp : null;
         const not_justified = "justified" in item && !item.justified;
-        const justification = "reasons" in item ? item.reasons || NO_JUSTICATION : "reason" in item ? item.reason.text : NO_JUSTICATION;
+        const justification =
+          "reasons" in item
+            ? item.reasons || NO_JUSTIFICATION
+            : "reason" in item
+            ? item.reason.text
+            : NO_JUSTIFICATION;
+
+        const dateString = toTimestamp
+          ? `du ${new Date(timestamp).toLocaleDateString("fr-FR", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })} au ${new Date(toTimestamp).toLocaleDateString("fr-FR", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`
+          : new Date(timestamp).toLocaleDateString("fr-FR", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
 
         return (
           <NativeItem
-            key={timestamp}
+            key={timestamp + "nitstp"}
             entering={animPapillon(FadeInUp).delay((showMore ? index - 3 : index) * 20 + 50)}
             exiting={animPapillon(FadeOutDown).delay(index * 20)}
             animated
@@ -105,27 +122,20 @@ const AttendanceItem: React.FC<AttendanceItemProps> = ({
             }
             separator
           >
-            <NativeText variant="title">
-              {justification}
-            </NativeText>
+            <NativeText variant="title">{justification}</NativeText>
 
             {not_justified && (
-              <NativeText variant="default" style={{
-                color: "#D10000",
-              }}>
+              <NativeText
+                variant="default"
+                style={{
+                  color: "#D10000",
+                }}
+              >
                 Non justifié
               </NativeText>
             )}
 
-            <NativeText variant="subtitle">
-              {new Date(timestamp).toLocaleDateString("fr-FR", {
-                weekday: "long",
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </NativeText>
+            <NativeText variant="subtitle">{dateString}</NativeText>
           </NativeItem>
         );
       })}
