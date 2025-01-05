@@ -17,16 +17,20 @@ export type AverageDiffGrade = {
   without: number; // La moyenne sans certaines notes
 };
 
-// Fonction pour calculer la moyenne générale en suivant la méthode EcoleDirecte
+// Fonction pour calculer la moyenne des notes globales par matière, en fonction de la cible (par défaut, "student")
 const getPronoteAverage = (
   grades: Grade[],
   target: Target = "student",
   useMath: boolean = false
 ): number => {
-  try {
-    if (!grades || grades.length === 0) return -1;
+  console.log("[getPronoteAverage] Calculating overall average", { target, useMath });
 
-    // Grouper les notes par matière
+  try {
+    if (!grades || grades.length === 0) {
+      console.warn("[getPronoteAverage] No grades provided");
+      return -1;
+    }
+
     const groupedBySubject = grades.reduce(
       (acc: Record<string, Grade[]>, grade) => {
         (acc[grade.subjectId || grade.subjectName] ||= []).push(grade);
@@ -35,43 +39,50 @@ const getPronoteAverage = (
       {}
     );
 
-    let totalWeightedSum = 0; // Somme des produits (Moyenne * Coefficient)
-    let totalCoefficientSum = 0; // Somme des coefficients globaux
+    let countedSubjects = 0;
 
-    // Calculer la moyenne totale
-    for (const subjectGrades of Object.values(groupedBySubject)) {
-      const subjectAverage = getSubjectAverage(subjectGrades, target, useMath);
-      if (subjectAverage === -1) continue;
+    const totalAverage = Object.values(groupedBySubject).reduce(
+      (acc, subjectGrades) => {
+        const nAvg = getSubjectAverage(subjectGrades, target, useMath);
 
-      const subjectCoefficient = subjectGrades.reduce(
-        (sum, grade) => sum + grade.coefficient,
-        0
-      );
+        if (nAvg !== -1) {
+          countedSubjects++;
+        } else {
+          console.warn("[getPronoteAverage] Invalid subject average", { subjectGrades });
+          return acc;
+        }
 
-      totalWeightedSum += subjectAverage * subjectCoefficient;
-      totalCoefficientSum += subjectCoefficient;
-    }
+        return acc + nAvg;
+      },
+      0
+    );
 
-    if (totalCoefficientSum === 0) return -1;
-    return parseFloat((totalWeightedSum / totalCoefficientSum).toFixed(2));
+    const overallAverage = countedSubjects > 0 ? totalAverage / countedSubjects : -1;
+    console.log("[getPronoteAverage] Overall average calculated", { overallAverage });
+    return overallAverage;
   } catch (e) {
+    console.error("[getPronoteAverage] Error calculating average", e);
     return -1;
   }
 };
 
-// Fonction pour calculer la moyenne d'une matière spécifique selon EcoleDirecte
+// Fonction pour calculer la moyenne d'une matière spécifique, selon la cible choisie
 export const getSubjectAverage = (
   subject: Grade[],
   target: Target = "student",
   useMath: boolean = false,
   loop: boolean = false
 ): number => {
+  console.log("[getSubjectAverage] Calculating subject average", { target, useMath });
+
   try {
-    let weightedSum = 0; // Somme des produits (Note * Coefficient)
-    let coefficientSum = 0; // Somme des coefficients
+    let calcGradesSum = 0;
+    let calcOutOfSum = 0;
+    let countedGrades = 0;
 
     for (const grade of subject) {
       const targetGrade = grade[target];
+
       if (
         !targetGrade ||
         targetGrade.disabled ||
@@ -79,25 +90,62 @@ export const getSubjectAverage = (
         targetGrade.value < 0 ||
         grade.coefficient === 0 ||
         typeof targetGrade.value !== "number"
-      )
+      ) {
+        console.warn("[getSubjectAverage] Skipping invalid grade", { grade });
         continue;
+      }
 
       const coefficient = grade.coefficient;
       const outOfValue = grade.outOf.value!;
 
-      // Mettre les notes sur 20 si nécessaire
-      const normalizedValue =
-        outOfValue > 20
-          ? (targetGrade.value / outOfValue) * 20
-          : targetGrade.value;
+      if (grade.isOptional && !loop) {
+        const avgWithout = getSubjectAverage(
+          subject.filter((g) => JSON.stringify(g) !== JSON.stringify(grade)),
+          target,
+          useMath,
+          true
+        );
 
-      weightedSum += normalizedValue * coefficient;
-      coefficientSum += coefficient;
+        const avgWith = getSubjectAverage(subject, target, useMath, true);
+
+        if (avgWithout > avgWith) {
+          console.info("[getSubjectAverage] Optional grade excluded", { grade });
+          continue;
+        }
+      }
+
+      if (grade.isBonus) {
+        const averageMoy = outOfValue / 2;
+        const newGradeValue = targetGrade.value - averageMoy;
+
+        if (newGradeValue < 0) continue;
+
+        calcGradesSum += newGradeValue;
+        calcOutOfSum += 1;
+      } else if (useMath) {
+        calcGradesSum += targetGrade.value * coefficient;
+      } else if (
+        targetGrade.value > 20 ||
+        (coefficient < 1 && outOfValue - 20 >= -5) ||
+        outOfValue > 20
+      ) {
+        const gradeOn20 = (targetGrade.value / outOfValue) * 20;
+        calcGradesSum += gradeOn20 * coefficient;
+        calcOutOfSum += 20 * coefficient;
+      } else {
+        calcGradesSum += targetGrade.value * coefficient;
+        calcOutOfSum += outOfValue * coefficient;
+      }
+
+      countedGrades += useMath ? coefficient : 1;
     }
 
-    if (coefficientSum === 0) return -1;
-    return parseFloat((weightedSum / coefficientSum).toFixed(2));
+    const subjectAverage =
+      calcOutOfSum === 0 ? -1 : Math.min((calcGradesSum / calcOutOfSum) * 20, 20);
+    console.log("[getSubjectAverage] Subject average calculated", { subjectAverage });
+    return isNaN(subjectAverage) ? -1 : subjectAverage;
   } catch (e) {
+    console.error("[getSubjectAverage] Error calculating subject average", e);
     return -1;
   }
 };
@@ -109,20 +157,25 @@ const getAverageDiffGrade = (
   target: Target = "student",
   useMath: boolean = false
 ): AverageDiffGrade => {
+  console.log("[getAverageDiffGrade] Calculating average difference", { target });
+
   try {
-    const baseAverage = getSubjectAverage(list, target, useMath);
+    const baseAverage = getSubjectAverage(list, target);
     const baseWithoutGradeAverage = getSubjectAverage(
       list.filter((grade) => JSON.stringify(grades[0]) !== JSON.stringify(grade)),
       target,
       useMath
     );
 
-    return {
+    const result = {
       difference: baseWithoutGradeAverage - baseAverage,
       with: baseAverage,
       without: baseWithoutGradeAverage,
     };
+    console.log("[getAverageDiffGrade] Average difference calculated", { result });
+    return result;
   } catch (e) {
+    console.error("[getAverageDiffGrade] Error calculating average difference", e);
     return {
       difference: 0,
       with: 0,
@@ -138,9 +191,11 @@ const getAveragesHistory = (
   final?: number,
   useMath: boolean = false
 ): GradeHistory[] => {
+  console.log("[getAveragesHistory] Generating averages history", { target });
+
   try {
     const history = grades.map((grade, index) => ({
-      value: getPronoteAverage(grades.slice(0, index + 1), target, useMath),
+      value: getPronoteAverage(grades.slice(0, index + 1), target),
       date: new Date(grade.timestamp).toISOString(),
     }));
 
@@ -151,8 +206,11 @@ const getAveragesHistory = (
       date: new Date().toISOString(),
     });
 
-    return history.filter((x) => !isNaN(x.value));
+    const filteredHistory = history.filter((x) => !isNaN(x.value));
+    console.log("[getAveragesHistory] Averages history generated", { filteredHistory });
+    return filteredHistory;
   } catch (e) {
+    console.error("[getAveragesHistory] Error generating averages history", e);
     return [];
   }
 };
