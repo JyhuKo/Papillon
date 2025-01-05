@@ -1,20 +1,20 @@
-// Importation des types nécessaires
+// On importe le type `Grade` depuis le chemin spécifié
 import type { Grade } from "@/services/shared/Grade";
 
-// Interface pour représenter l'historique des notes
+// Définition de l'interface `GradeHistory` pour représenter l'historique des moyennes avec une valeur numérique et une date
 export interface GradeHistory {
-  value: number; // Valeur de la note
-  date: string; // Date de la note
+  value: number; // La valeur de la moyenne
+  date: string; // La date associée à la moyenne
 }
 
-// Définition du type `Target`
+// Définition du type `Target` qui indique quel type de note ou de moyenne cibler
 type Target = "student" | "average" | "min" | "max";
 
-// Définition du type `AverageDiffGrade`
+// Définition du type `AverageDiffGrade` pour calculer la différence entre les moyennes avec et sans certaines notes
 export type AverageDiffGrade = {
-  difference?: number;
-  with: number;
-  without: number;
+  difference?: number; // La différence de moyenne entre deux ensembles de notes
+  with: number; // La moyenne avec toutes les notes
+  without: number; // La moyenne sans certaines notes
 };
 
 // Fonction pour calculer la moyenne générale selon ÉcoleDirecte
@@ -23,16 +23,17 @@ const getPronoteAverage = (
   target: Target = "student"
 ): number => {
   try {
+    // Si aucune note n'est fournie ou que la liste est vide, retourner -1
     if (!grades || grades.length === 0) return -1;
 
     // Grouper les notes par matière
     const groupedBySubject = grades.reduce(
       (acc: Record<string, { grades: Grade[]; coefficient: number }>, grade) => {
-        const subjectKey = grade.subjectId || grade.subjectName;
+        const subjectKey = grade.subjectId || grade.subjectName; // Identifiant ou nom de la matière
         if (!acc[subjectKey]) {
           acc[subjectKey] = { grades: [], coefficient: grade.subjectCoefficient || 1 };
         }
-        acc[subjectKey].grades.push(grade);
+        acc[subjectKey].grades.push(grade); // Ajouter la note à la liste des notes pour la matière correspondante
         return acc;
       },
       {}
@@ -41,12 +42,12 @@ const getPronoteAverage = (
     let totalWeightedSum = 0; // Somme des moyennes pondérées par matière
     let totalCoefficient = 0; // Somme des coefficients
 
-    // Calculer la moyenne par matière et la somme pondérée
+    // Calculer la moyenne par matière et ajouter à la somme pondérée
     Object.values(groupedBySubject).forEach(({ grades: subjectGrades, coefficient }) => {
-      const subjectAverage = getSubjectAverage(subjectGrades, target);
+      const subjectAverage = getSubjectAverage(subjectGrades, target); // Moyenne de la matière
       if (subjectAverage !== -1) {
-        totalWeightedSum += subjectAverage * coefficient;
-        totalCoefficient += coefficient;
+        totalWeightedSum += subjectAverage * coefficient; // Ajouter à la somme pondérée
+        totalCoefficient += coefficient; // Ajouter le coefficient
       }
     });
 
@@ -57,7 +58,7 @@ const getPronoteAverage = (
   }
 };
 
-// Fonction pour calculer la moyenne par matière selon ÉcoleDirecte
+// Fonction pour calculer la moyenne d'une matière selon ÉcoleDirecte
 export const getSubjectAverage = (
   subject: Grade[],
   target: Target = "student"
@@ -68,9 +69,9 @@ export const getSubjectAverage = (
 
     // Parcourir chaque note pour les convertir et les pondérer
     subject.forEach((grade) => {
-      const targetGrade = grade[target];
+      const targetGrade = grade[target]; // Note cible choisie
       if (
-        !targetGrade ||
+        !targetGrade || // Vérifier si la note est invalide
         targetGrade.disabled ||
         targetGrade.value === null ||
         targetGrade.value < 0 ||
@@ -80,18 +81,19 @@ export const getSubjectAverage = (
         return;
 
       // Conversion des notes sur une base de 20 si nécessaire
-      const outOfValue = grade.outOf.value!;
+      const outOfValue = grade.outOf.value!; // Valeur maximale possible pour la note
       const normalizedValue =
-        outOfValue !== 20 ? (targetGrade.value / outOfValue) * 20 : targetGrade.value;
+        outOfValue !== 20 ? (targetGrade.value / outOfValue) * 20 : targetGrade.value; // Ajuster pour une base sur 20
 
       // Ajouter à la somme pondérée
       weightedSum += normalizedValue * grade.coefficient;
       totalCoefficient += grade.coefficient;
     });
 
-    // Calculer la moyenne sur la base des coefficients
+    // Si aucun coefficient n'est comptabilisé, retourner -1
     if (totalCoefficient === 0) return -1;
 
+    // Retourner la moyenne calculée, arrondie au centième
     return parseFloat((weightedSum / totalCoefficient).toFixed(2));
   } catch {
     return -1;
@@ -105,16 +107,19 @@ const getAverageDiffGrade = (
   target: Target = "student"
 ): AverageDiffGrade => {
   try {
+    // Calculer la moyenne avec toutes les notes
     const baseAverage = getSubjectAverage(list, target);
+
+    // Calculer la moyenne sans certaines notes
     const baseWithoutGradeAverage = getSubjectAverage(
       list.filter((grade) => JSON.stringify(grades[0]) !== JSON.stringify(grade)),
       target
     );
 
     return {
-      difference: parseFloat((baseWithoutGradeAverage - baseAverage).toFixed(2)),
-      with: baseAverage,
-      without: baseWithoutGradeAverage,
+      difference: parseFloat((baseWithoutGradeAverage - baseAverage).toFixed(2)), // Différence entre les deux moyennes
+      with: baseAverage, // Moyenne avec toutes les notes
+      without: baseWithoutGradeAverage, // Moyenne sans certaines notes
     };
   } catch {
     return {
@@ -125,30 +130,34 @@ const getAverageDiffGrade = (
   }
 };
 
-// Fonction pour générer un historique des moyennes
+// Fonction pour générer un historique des moyennes au fil du temps
 const getAveragesHistory = (
   grades: Grade[],
   target: Target = "student",
   final?: number
 ): GradeHistory[] => {
   try {
+    // Générer l'historique des moyennes jusqu'à la date de chaque note
     const history = grades.map((grade, index) => ({
-      value: getPronoteAverage(grades.slice(0, index + 1), target),
-      date: new Date(grade.timestamp).toISOString(),
+      value: getPronoteAverage(grades.slice(0, index + 1), target), // Moyenne jusqu'à ce point
+      date: new Date(grade.timestamp).toISOString(), // Date au format ISO
     }));
 
+    // Trier l'historique par date
     history.sort((a, b) => a.date.localeCompare(b.date));
 
+    // Ajouter un point final avec la moyenne finale (ou calculée)
     history.push({
-      value: final ?? getPronoteAverage(grades, target),
-      date: new Date().toISOString(),
+      value: final ?? getPronoteAverage(grades, target), // Moyenne finale ou calculée
+      date: new Date().toISOString(), // Date actuelle
     });
 
+    // Supprimer les valeurs NaN
     return history.filter((x) => !isNaN(x.value));
   } catch {
     return [];
   }
 };
 
-// Export des fonctions
+// Exportation des fonctions pour utilisation externe
 export { getPronoteAverage, getAverageDiffGrade, getAveragesHistory };
