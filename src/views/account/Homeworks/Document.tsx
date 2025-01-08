@@ -172,7 +172,7 @@ const HomeworksDocument: Screen<"HomeworksDocument"> = ({ route }) => {
 
           <NativeItem>
             <HTMLView
-              value={`<body>${homework.content.replaceAll("<br>", " ")}</body>`}
+              value={`<body>${homework.content.replaceAll("<br>", "").replaceAll("<p>", "").replaceAll("</p>", "")}</body>`}
               stylesheet={stylesText}
               onLinkPress={(url) => openUrl(url)}
             />
