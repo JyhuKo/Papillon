@@ -20,15 +20,16 @@ const getDifferences = (
 
 const removeHtmlTags = (content: string): string => {
   return content
-    .replace(/<[^>]*>/g, "") // remove HTML tags
-    .replace(/&nbsp;/g, " ") // Replace HTML entities
+    .replace(/<img[^>]*>/g, "[contient une image]")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"")
     .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ") // Replace multiple spaces with a single space
-    .trim(); // Remove leading and trailing spaces
+    .replace(/\s+/g, " ")
+    .trim();
 };
 
 const fetchNews = async (): Promise<Information[]> => {
